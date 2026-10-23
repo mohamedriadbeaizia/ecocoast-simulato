@@ -1,0 +1,1321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EcoCoast Sim - Coastal Environmental & Construction Pollution Impact</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Leaflet CSS & JS for geo-spatial imagery -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  
+  <!-- Chart.js for degradation charts -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Google Fonts: Plus Jakarta Sans & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          },
+          colors: {
+            brand: {
+              400: '#38bdf8',
+              500: '#0ea5e9',
+              600: '#0284c7',
+              900: '#0c4a6e',
+            }
+          }
+        }
+      }
+    };
+  </script>
+
+  <style>
+    /* Compact Glassmorphism Tokens */
+    .glass-panel {
+      background: rgba(13, 20, 36, 0.88);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      box-shadow: 0 16px 36px -12px rgba(0, 0, 0, 0.75);
+    }
+    .glass-card {
+      background: rgba(22, 33, 54, 0.65);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .panel-transition {
+      transition: transform 0.32s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease-out;
+    }
+    
+    /* Leaflet customization */
+    .leaflet-container {
+      background-color: #07101e;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+    .leaflet-popup-content-wrapper {
+      background: rgba(15, 23, 42, 0.95);
+      color: #f1f5f9;
+      border-radius: 12px;
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      backdrop-filter: blur(12px);
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.7);
+    }
+    .leaflet-popup-tip {
+      background: rgba(15, 23, 42, 0.95);
+    }
+
+    /* Split Slider Controls */
+    #split-slider {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 4px;
+      background: #38bdf8;
+      cursor: ew-resize;
+      z-index: 800;
+      box-shadow: 0 0 18px rgba(56, 189, 248, 0.9);
+      touch-action: none;
+    }
+    #split-handle {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: #0284c7;
+      border: 2.5px solid #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 16px rgba(2, 132, 199, 0.9);
+      cursor: ew-resize;
+      color: white;
+    }
+
+    .construction-ping {
+      animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+    }
+    @keyframes pulse-ring {
+      0% { transform: scale(0.9); opacity: 0.85; }
+      50% { transform: scale(1.35); opacity: 0.25; }
+      100% { transform: scale(0.9); opacity: 0.85; }
+    }
+
+    input[type=range] {
+      accent-color: #38bdf8;
+    }
+
+    ::-webkit-scrollbar {
+      width: 5px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.4);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(100, 116, 139, 0.5);
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen overflow-hidden select-none font-sans">
+
+  <!-- Top Navigation Bar -->
+  <header class="absolute top-0 left-0 right-0 z-[1000] px-3.5 py-2 glass-panel border-b border-slate-800/80 flex items-center justify-between">
+    <div class="flex items-center gap-2.5">
+      <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-cyan-600 via-sky-500 to-emerald-400 flex items-center justify-center shadow-md shadow-sky-500/20 shrink-0">
+        <i data-lucide="waves" class="w-4 h-4 text-white"></i>
+      </div>
+      <div>
+        <div class="flex items-center gap-1.5">
+          <h1 class="text-sm md:text-base font-bold tracking-tight bg-gradient-to-r from-sky-400 via-teal-300 to-emerald-400 bg-clip-text text-transparent">
+            EcoCoast AI Simulator
+          </h1>
+          <span class="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-400 border border-sky-500/30">
+            EIA v2.4
+          </span>
+        </div>
+        <p class="text-[10px] text-slate-400 hidden sm:block">
+          Coastal Construction Environmental Impact & Sediment Dispersion
+        </p>
+      </div>
+    </div>
+
+    <!-- Center Controls: Preset Locations & Split View -->
+    <div class="flex items-center gap-2">
+      <div class="flex items-center bg-slate-900/90 rounded-lg border border-slate-700/60 p-0.5">
+        <button id="btn-platamona" onclick="switchLocation('platamona')" class="px-2.5 py-1 text-xs font-semibold rounded-md transition-all bg-sky-600 text-white shadow-sm flex items-center gap-1">
+          <i data-lucide="map-pin" class="w-3 h-3"></i>
+          <span>Platamona (Sardinia)</span>
+        </button>
+        <button id="btn-falassarna" onclick="switchLocation('falassarna')" class="px-2.5 py-1 text-xs font-semibold rounded-md transition-all text-slate-400 hover:text-white flex items-center gap-1">
+          <i data-lucide="map-pin" class="w-3 h-3"></i>
+          <span>Falassarna (Crete)</span>
+        </button>
+      </div>
+
+      <!-- Split View Toggle -->
+      <button id="toggle-split-btn" onclick="toggleSplitMode()" class="px-2.5 py-1 rounded-lg border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700 text-xs font-semibold text-slate-200 flex items-center gap-1.5 transition-all">
+        <i data-lucide="split-square-vertical" class="w-3.5 h-3.5 text-sky-400"></i>
+        <span class="hidden md:inline">Split View</span>
+      </button>
+
+      <!-- Zen Map View Toggle (Collapse / Expand all HUDs) -->
+      <button id="zen-toggle-btn" onclick="toggleAllPanels()" title="Zen Map View (Hide/Show Panels)" class="px-2.5 py-1 rounded-lg border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700 text-xs font-semibold text-slate-200 flex items-center gap-1.5 transition-all">
+        <i data-lucide="eye" id="zen-icon" class="w-3.5 h-3.5 text-teal-400"></i>
+        <span class="hidden md:inline" id="zen-label">Full Map</span>
+      </button>
+    </div>
+
+    <!-- Right Controls: Report & Reset -->
+    <div class="flex items-center gap-1.5">
+      <button onclick="exportSummaryReport()" title="Export EIA Summary Report" class="px-2.5 py-1 rounded-lg border border-slate-700 bg-slate-800/80 hover:bg-slate-700 text-xs font-semibold text-sky-300 flex items-center gap-1.5 transition-colors">
+        <i data-lucide="file-text" class="w-3.5 h-3.5"></i>
+        <span class="hidden lg:inline">Export EIA</span>
+      </button>
+      <button onclick="resetAllProjects()" title="Reset All Sites" class="p-1.5 rounded-lg border border-rose-900/40 bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 transition-colors">
+        <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- Map & Canvas Viewport -->
+  <main class="relative w-full h-screen pt-[50px] overflow-hidden">
+    <!-- Map Container -->
+    <div id="map" class="w-full h-full z-0"></div>
+
+    <!-- Turbidity & Particle Canvas -->
+    <canvas id="plumeCanvas" class="absolute inset-0 pointer-events-none z-[400]"></canvas>
+
+    <!-- Before / After Curtain Split Overlay -->
+    <div id="split-overlay" class="hidden absolute inset-0 pointer-events-none z-[450] overflow-hidden">
+      <!-- Baseline Pane (Left) -->
+      <div id="split-left-pane" class="absolute top-0 bottom-0 left-0 overflow-hidden border-r-2 border-sky-400 bg-slate-950/20 shadow-2xl" style="width: 50%;">
+        <div class="absolute top-14 left-4 px-2.5 py-1 rounded-md bg-emerald-950/90 border border-emerald-500/40 text-emerald-300 text-[10px] font-bold tracking-wide backdrop-blur-md flex items-center gap-1.5 shadow-lg">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span>BEFORE: BASELINE</span>
+        </div>
+      </div>
+      <!-- After Construction Tag (Right) -->
+      <div class="absolute top-14 right-4 px-2.5 py-1 rounded-md bg-amber-950/90 border border-amber-500/40 text-amber-300 text-[10px] font-bold tracking-wide backdrop-blur-md flex items-center gap-1.5 shadow-lg">
+        <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+        <span>AFTER: CONSTRUCTION</span>
+      </div>
+      <!-- Draggable Split Handle -->
+      <div id="split-slider" style="left: 50%;">
+        <div id="split-handle">
+          <i data-lucide="chevrons-left-right" class="w-4 h-4"></i>
+        </div>
+      </div>
+    </div>
+
+    <!-- Shoreline Placement Cursor Banner -->
+    <div id="placement-hint" class="hidden absolute top-16 left-1/2 -translate-x-1/2 z-[600] px-3.5 py-1.5 rounded-full bg-sky-500/95 text-white font-medium text-xs shadow-2xl backdrop-blur-md border border-white/20 flex items-center gap-2 animate-bounce">
+      <i data-lucide="mouse-pointer-click" class="w-3.5 h-3.5"></i>
+      <span id="hint-text">Click anywhere along the beach to place construction asset</span>
+      <button onclick="cancelPlacement()" class="ml-1 hover:bg-sky-600 rounded-full p-0.5">
+        <i data-lucide="x" class="w-3 h-3"></i>
+      </button>
+    </div>
+
+    <!-- LEFT PANEL: Collapsible Construction Arsenal & Mitigations -->
+    <div id="left-panel-container" class="absolute top-14 left-3 z-[500] pointer-events-auto panel-transition w-[320px] max-w-[calc(100vw-24px)] flex flex-col gap-2">
+      
+      <!-- Minimized Floating Pill (Shown when panel is minimized) -->
+      <button id="left-min-pill" onclick="toggleLeftPanel()" class="hidden self-start px-3 py-1.5 rounded-xl glass-panel border border-sky-500/40 hover:border-sky-400 text-xs font-semibold text-sky-300 flex items-center gap-2 shadow-xl hover:bg-slate-900 transition-all">
+        <i data-lucide="hard-hat" class="w-4 h-4 text-amber-400"></i>
+        <span>Construction & Mitigations</span>
+        <span id="pill-site-badge" class="px-1.5 py-0.2 rounded-full bg-sky-500/20 text-[10px] text-sky-400 font-mono">1</span>
+        <i data-lucide="chevron-right" class="w-3.5 h-3.5 text-slate-400"></i>
+      </button>
+
+      <!-- Full Expandable Card -->
+      <div id="left-panel-card" class="glass-panel rounded-xl p-3 flex flex-col gap-2.5 max-h-[calc(100vh-140px)] overflow-y-auto">
+        <!-- Panel Header with Minimize Button -->
+        <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+          <div class="flex items-center gap-1.5">
+            <i data-lucide="hard-hat" class="w-3.5 h-3.5 text-amber-400"></i>
+            <h2 class="text-[11px] font-bold uppercase tracking-wider text-slate-200">
+              Construction Arsenal
+            </h2>
+          </div>
+          <div class="flex items-center gap-1">
+            <span id="active-sites-count" class="text-[10px] font-bold font-mono px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-400 border border-sky-500/20">
+              1 Site
+            </span>
+            <!-- Minimize Button -->
+            <button onclick="toggleLeftPanel()" title="Minimize Construction Panel" class="w-6 h-6 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors">
+              <i data-lucide="minus" class="w-3.5 h-3.5"></i>
+            </button>
+          </div>
+        </div>
+
+        <p class="text-[11px] text-slate-400 leading-tight">
+          Select an asset, then click on the beach/coast to simulate dispersion.
+        </p>
+
+        <!-- Construction Types Grid -->
+        <div class="grid grid-cols-2 gap-1.5">
+          <!-- Resort -->
+          <button onclick="selectProjectType('hotel')" id="btn-proj-hotel" class="proj-select-btn p-2 rounded-lg border border-slate-700/80 bg-slate-800/50 hover:bg-slate-700/60 hover:border-amber-400/50 text-left transition-all group">
+            <div class="flex items-center justify-between mb-0.5">
+              <span class="p-1 rounded bg-amber-500/10 text-amber-400"><i data-lucide="hotel" class="w-3.5 h-3.5"></i></span>
+              <span class="text-[9px] font-mono text-amber-300 font-bold">+38 NTU</span>
+            </div>
+            <div class="font-semibold text-[11px] text-slate-200 truncate">Luxury Resort</div>
+            <div class="text-[9px] text-slate-400">Excavation</div>
+          </button>
+
+          <!-- Marina -->
+          <button onclick="selectProjectType('marina')" id="btn-proj-marina" class="proj-select-btn p-2 rounded-lg border border-slate-700/80 bg-slate-800/50 hover:bg-slate-700/60 hover:border-cyan-400/50 text-left transition-all group">
+            <div class="flex items-center justify-between mb-0.5">
+              <span class="p-1 rounded bg-cyan-500/10 text-cyan-400"><i data-lucide="anchor" class="w-3.5 h-3.5"></i></span>
+              <span class="text-[9px] font-mono text-cyan-300 font-bold">+56 NTU</span>
+            </div>
+            <div class="font-semibold text-[11px] text-slate-200 truncate">Marina & Pier</div>
+            <div class="text-[9px] text-slate-400">Dredging</div>
+          </button>
+
+          <!-- Desalination -->
+          <button onclick="selectProjectType('desal')" id="btn-proj-desal" class="proj-select-btn p-2 rounded-lg border border-slate-700/80 bg-slate-800/50 hover:bg-slate-700/60 hover:border-rose-400/50 text-left transition-all group">
+            <div class="flex items-center justify-between mb-0.5">
+              <span class="p-1 rounded bg-rose-500/10 text-rose-400"><i data-lucide="factory" class="w-3.5 h-3.5"></i></span>
+              <span class="text-[9px] font-mono text-rose-300 font-bold">+68 NTU</span>
+            </div>
+            <div class="font-semibold text-[11px] text-slate-200 truncate">Desal Plant</div>
+            <div class="text-[9px] text-slate-400">Brine Outfall</div>
+          </button>
+
+          <!-- Highway -->
+          <button onclick="selectProjectType('road')" id="btn-proj-road" class="proj-select-btn p-2 rounded-lg border border-slate-700/80 bg-slate-800/50 hover:bg-slate-700/60 hover:border-purple-400/50 text-left transition-all group">
+            <div class="flex items-center justify-between mb-0.5">
+              <span class="p-1 rounded bg-purple-500/10 text-purple-400"><i data-lucide="route" class="w-3.5 h-3.5"></i></span>
+              <span class="text-[9px] font-mono text-purple-300 font-bold">+44 NTU</span>
+            </div>
+            <div class="font-semibold text-[11px] text-slate-200 truncate">Coastal Road</div>
+            <div class="text-[9px] text-slate-400">Runoff Spill</div>
+          </button>
+        </div>
+
+        <!-- Mitigation Measures Section -->
+        <div class="border-t border-slate-800 pt-2">
+          <div class="flex items-center justify-between mb-1.5">
+            <span class="text-[10px] font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1">
+              <i data-lucide="shield-check" class="w-3 h-3 text-emerald-400"></i> Eco-Mitigation
+            </span>
+            <span class="text-[9px] text-emerald-400 font-mono">Active Reductions</span>
+          </div>
+
+          <div class="space-y-1.5">
+            <!-- Silt Curtains -->
+            <label class="flex items-center justify-between p-1.5 rounded-lg bg-slate-900/60 hover:bg-slate-900 border border-slate-800 cursor-pointer transition-all">
+              <div class="flex items-center gap-1.5">
+                <input type="checkbox" id="mitig-silt" onchange="updateSimulation()" class="w-3.5 h-3.5 rounded text-emerald-500 bg-slate-800 border-slate-700 focus:ring-0">
+                <span class="text-[10px] font-medium text-slate-300">Silt Curtains</span>
+              </div>
+              <span class="text-[9px] font-mono text-emerald-400 bg-emerald-950/80 px-1 py-0.2 rounded border border-emerald-800/40">-55% NTU</span>
+            </label>
+
+            <!-- Closed-loop Treatment -->
+            <label class="flex items-center justify-between p-1.5 rounded-lg bg-slate-900/60 hover:bg-slate-900 border border-slate-800 cursor-pointer transition-all">
+              <div class="flex items-center gap-1.5">
+                <input type="checkbox" id="mitig-treatment" onchange="updateSimulation()" class="w-3.5 h-3.5 rounded text-emerald-500 bg-slate-800 border-slate-700 focus:ring-0">
+                <span class="text-[10px] font-medium text-slate-300">Closed-Loop Filter</span>
+              </div>
+              <span class="text-[9px] font-mono text-emerald-400 bg-emerald-950/80 px-1 py-0.2 rounded border border-emerald-800/40">+22% WQI</span>
+            </label>
+
+            <!-- Posidonia Sanctuary -->
+            <label class="flex items-center justify-between p-1.5 rounded-lg bg-slate-900/60 hover:bg-slate-900 border border-slate-800 cursor-pointer transition-all">
+              <div class="flex items-center gap-1.5">
+                <input type="checkbox" id="mitig-posidonia" onchange="updateSimulation()" class="w-3.5 h-3.5 rounded text-emerald-500 bg-slate-800 border-slate-700 focus:ring-0">
+                <span class="text-[10px] font-medium text-slate-300">Posidonia Sanctuary</span>
+              </div>
+              <span class="text-[9px] font-mono text-emerald-400 bg-emerald-950/80 px-1 py-0.2 rounded border border-emerald-800/40">+30% Meadow</span>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT PANEL: Collapsible Water Telemetry & Real-Time Chart -->
+    <div id="right-panel-container" class="absolute top-14 right-3 z-[500] pointer-events-auto panel-transition w-[320px] max-w-[calc(100vw-24px)] flex flex-col gap-2 items-end">
+      
+      <!-- Minimized Floating Pill (Shown when right panel is minimized) -->
+      <button id="right-min-pill" onclick="toggleRightPanel()" class="hidden px-3 py-1.5 rounded-xl glass-panel border border-sky-500/40 hover:border-sky-400 text-xs font-semibold text-sky-300 flex items-center gap-2 shadow-xl hover:bg-slate-900 transition-all">
+        <i data-lucide="activity" class="w-4 h-4 text-sky-400"></i>
+        <span>Telemetry & Evolution</span>
+        <span id="pill-wqi-badge" class="px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-400 font-mono text-[10px]">96 WQI</span>
+        <i data-lucide="chevron-left" class="w-3.5 h-3.5 text-slate-400"></i>
+      </button>
+
+      <!-- Full Expandable Card -->
+      <div id="right-panel-card" class="glass-panel rounded-xl p-3 w-full flex flex-col gap-2 max-h-[calc(100vh-140px)] overflow-y-auto">
+        <!-- Panel Header with Minimize Button -->
+        <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+          <div class="flex items-center gap-1.5">
+            <i data-lucide="activity" class="w-3.5 h-3.5 text-sky-400"></i>
+            <h2 class="text-[11px] font-bold uppercase tracking-wider text-slate-200">
+              Water Quality Telemetry
+            </h2>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <div id="wqi-status-badge" class="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
+              EXCELLENT
+            </div>
+            <!-- Minimize Button -->
+            <button onclick="toggleRightPanel()" title="Minimize Telemetry Panel" class="w-6 h-6 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors">
+              <i data-lucide="minus" class="w-3.5 h-3.5"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Big Metric: WQI Overall Score -->
+        <div class="flex items-baseline justify-between bg-slate-900/60 p-2.5 rounded-lg border border-slate-800">
+          <div>
+            <div class="text-[9px] uppercase text-slate-400 font-semibold tracking-wider">Water Quality Index</div>
+            <div class="text-2xl font-extrabold font-mono tracking-tight text-white flex items-baseline gap-1 mt-0.5">
+              <span id="metric-wqi">96</span>
+              <span class="text-[10px] font-normal text-slate-400">/ 100</span>
+            </div>
+          </div>
+          <div class="text-right">
+            <div class="text-[9px] text-slate-400 font-medium">Secchi Clarity</div>
+            <div class="text-xs font-bold font-mono text-sky-300" id="metric-secchi">14.2 m</div>
+          </div>
+        </div>
+
+        <!-- Metric Grid -->
+        <div class="grid grid-cols-2 gap-1.5 text-xs">
+          <!-- Turbidity -->
+          <div class="glass-card p-2 rounded-lg">
+            <div class="flex items-center justify-between text-slate-400 text-[9px] mb-0.5">
+              <span>Turbidity (NTU)</span>
+              <i data-lucide="droplets" class="w-2.5 h-2.5 text-sky-400"></i>
+            </div>
+            <div class="text-sm font-bold font-mono text-slate-100" id="metric-turbidity">1.2 NTU</div>
+            <div class="text-[8px] text-emerald-400" id="metric-turbidity-sub">&lt; 5 NTU Safe</div>
+          </div>
+
+          <!-- Suspended Solids -->
+          <div class="glass-card p-2 rounded-lg">
+            <div class="flex items-center justify-between text-slate-400 text-[9px] mb-0.5">
+              <span>TSS (mg/L)</span>
+              <i data-lucide="layers" class="w-2.5 h-2.5 text-amber-400"></i>
+            </div>
+            <div class="text-sm font-bold font-mono text-slate-100" id="metric-tss">3.8 mg/L</div>
+            <div class="text-[8px] text-slate-400">Sediment load</div>
+          </div>
+
+          <!-- Posidonia Meadow -->
+          <div class="glass-card p-2 rounded-lg">
+            <div class="flex items-center justify-between text-slate-400 text-[9px] mb-0.5">
+              <span>Posidonia Seagrass</span>
+              <i data-lucide="leaf" class="w-2.5 h-2.5 text-emerald-400"></i>
+            </div>
+            <div class="text-sm font-bold font-mono text-emerald-400" id="metric-posidonia">94%</div>
+            <div class="text-[8px] text-emerald-300/80">Canopy dense</div>
+          </div>
+
+          <!-- Underwater Noise -->
+          <div class="glass-card p-2 rounded-lg">
+            <div class="flex items-center justify-between text-slate-400 text-[9px] mb-0.5">
+              <span>Acoustics</span>
+              <i data-lucide="volume-2" class="w-2.5 h-2.5 text-rose-400"></i>
+            </div>
+            <div class="text-sm font-bold font-mono text-slate-100" id="metric-noise">42 dB</div>
+            <div class="text-[8px] text-slate-400">Ambient marine</div>
+          </div>
+        </div>
+
+        <!-- Real-Time Degradation Chart.js Section -->
+        <div class="pt-1 border-t border-slate-800">
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-[9px] font-bold uppercase tracking-wider text-slate-300">
+              Pollution Trend Over Time
+            </span>
+            <span class="text-[9px] text-sky-400 font-mono">T0 ➔ +5 Y</span>
+          </div>
+          <div class="h-24 w-full">
+            <canvas id="degradationChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ultra-Compact Bottom Timeline Scrubber -->
+    <div id="bottom-timeline-container" class="absolute bottom-4 left-1/2 -translate-x-1/2 z-[500] w-[95%] max-w-2xl glass-panel rounded-xl px-3.5 py-2.5 shadow-2xl">
+      <div class="flex flex-col gap-1.5">
+        <div class="flex items-center justify-between text-xs">
+          <div class="flex items-center gap-2">
+            <button id="play-pause-btn" onclick="toggleTimelinePlay()" class="w-7 h-7 rounded-lg bg-sky-500 hover:bg-sky-400 text-slate-950 flex items-center justify-center font-bold transition-all shadow-md shadow-sky-500/20">
+              <i data-lucide="play" id="play-btn-icon" class="w-3.5 h-3.5 fill-current"></i>
+            </button>
+            <div>
+              <span class="text-[9px] text-slate-400 uppercase font-semibold">Temporal Horizon:</span>
+              <div class="text-xs font-bold text-sky-300 font-mono" id="current-timeline-label">
+                T0: Pristine Baseline (Day 0)
+              </div>
+            </div>
+          </div>
+
+          <!-- Ambient Oceanographic Conditions -->
+          <div class="hidden sm:flex items-center gap-2 text-[10px] text-slate-400 bg-slate-900/60 px-2 py-1 rounded-lg border border-slate-800">
+            <span class="flex items-center gap-1">
+              <i data-lucide="wind" class="w-3 h-3 text-sky-400"></i>
+              <span id="current-drift-label">Drift: NE 0.35 m/s</span>
+            </span>
+            <span class="h-2.5 w-px bg-slate-700"></span>
+            <span class="flex items-center gap-1">
+              <i data-lucide="thermometer" class="w-3 h-3 text-amber-400"></i>
+              <span>22.4°C</span>
+            </span>
+          </div>
+        </div>
+
+        <!-- Interactive Range Slider -->
+        <div class="relative w-full pt-1">
+          <input 
+            type="range" 
+            id="timeline-slider" 
+            min="0" 
+            max="6" 
+            step="1" 
+            value="0" 
+            oninput="onTimelineChange(this.value)"
+            class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer border border-slate-700 focus:outline-none"
+          >
+          <div class="flex justify-between text-[9px] text-slate-400 font-mono mt-1 px-0.5">
+            <span>T0</span>
+            <span>+1M</span>
+            <span>+3M</span>
+            <span>+6M</span>
+            <span>+1Y</span>
+            <span>+3Y</span>
+            <span>+5Y</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    /* =========================================================================
+       DATA MODELS & LOCATIONAL CONFIGURATION
+       ========================================================================= */
+    const LOCATIONS = {
+      platamona: {
+        name: "Platamona Beach, Sassari",
+        country: "Sardinia, Italy",
+        lat: 40.8190,
+        lng: 8.4850,
+        zoom: 14,
+        driftAngle: 45,
+        driftSpeed: 0.35,
+        baseline: { wqi: 96, secchi: 14.2, turbidity: 1.2, tss: 3.8, posidonia: 94, noise: 42 }
+      },
+      falassarna: {
+        name: "Falassarna Beach",
+        country: "Crete, Greece",
+        lat: 35.4925,
+        lng: 23.5790,
+        zoom: 14,
+        driftAngle: 70,
+        driftSpeed: 0.28,
+        baseline: { wqi: 98, secchi: 16.5, turbidity: 0.9, tss: 2.9, posidonia: 96, noise: 38 }
+      }
+    };
+
+    const TIME_STEPS = [
+      { id: 0, label: "T0: Pristine Baseline (Day 0)", months: 0, factor: 0.0 },
+      { id: 1, label: "T1: +1 Month (Site Mobilization & Excavation)", months: 1, factor: 0.28 },
+      { id: 2, label: "T2: +3 Months (Heavy Dredging & Piling)", months: 3, factor: 0.55 },
+      { id: 3, label: "T3: +6 Months (Peak Structural Footprint)", months: 6, factor: 0.85 },
+      { id: 4, label: "T4: +1 Year (Commissioning & Initial Runoff)", months: 12, factor: 1.0 },
+      { id: 5, label: "T5: +3 Years (Cumulative Coastal Sedimentation)", months: 36, factor: 1.3 },
+      { id: 6, label: "T6: +5 Years (Permanent Coastal Equilibrium)", months: 60, factor: 1.55 }
+    ];
+
+    const PROJECT_TYPES = {
+      hotel: {
+        id: 'hotel',
+        name: "Luxury Resort",
+        color: "#f59e0b",
+        radiusMultiplier: 1.0,
+        turbidityImpact: 36,
+        tssImpact: 28,
+        noiseImpact: 35,
+        posidoniaDecay: 25
+      },
+      marina: {
+        id: 'marina',
+        name: "Marina & Pier",
+        color: "#06b6d4",
+        radiusMultiplier: 1.45,
+        turbidityImpact: 56,
+        tssImpact: 52,
+        noiseImpact: 48,
+        posidoniaDecay: 45
+      },
+      desal: {
+        id: 'desal',
+        name: "Desalination Plant",
+        color: "#ef4444",
+        radiusMultiplier: 1.25,
+        turbidityImpact: 68,
+        tssImpact: 45,
+        noiseImpact: 25,
+        posidoniaDecay: 55
+      },
+      road: {
+        id: 'road',
+        name: "Coastal Highway",
+        color: "#a855f7",
+        radiusMultiplier: 1.1,
+        turbidityImpact: 42,
+        tssImpact: 38,
+        noiseImpact: 42,
+        posidoniaDecay: 30
+      }
+    };
+
+    // State Variables
+    let currentLocKey = 'platamona';
+    let currentStepIndex = 0;
+    let selectedProjectType = null;
+    let isSplitMode = false;
+    let splitPercent = 50;
+    let isPlaying = false;
+    let playInterval = null;
+
+    // Panel Collapse States
+    let isLeftCollapsed = false;
+    let isRightCollapsed = false;
+    let isZenMode = false;
+
+    let placedSites = [];
+    let map = null;
+    let degradationChart = null;
+    let plumeCanvas = null;
+    let plumeCtx = null;
+    let particles = [];
+    let animationFrameId = null;
+
+    /* =========================================================================
+       PANEL COLLAPSE & MINIMIZE HANDLERS
+       ========================================================================= */
+    function toggleLeftPanel() {
+      isLeftCollapsed = !isLeftCollapsed;
+      const card = document.getElementById('left-panel-card');
+      const pill = document.getElementById('left-min-pill');
+
+      if (isLeftCollapsed) {
+        card.classList.add('hidden');
+        pill.classList.remove('hidden');
+      } else {
+        card.classList.remove('hidden');
+        pill.classList.add('hidden');
+      }
+      lucide.createIcons();
+    }
+
+    function toggleRightPanel() {
+      isRightCollapsed = !isRightCollapsed;
+      const card = document.getElementById('right-panel-card');
+      const pill = document.getElementById('right-min-pill');
+
+      if (isRightCollapsed) {
+        card.classList.add('hidden');
+        pill.classList.remove('hidden');
+      } else {
+        card.classList.remove('hidden');
+        pill.classList.add('hidden');
+        if (degradationChart) degradationChart.resize();
+      }
+      lucide.createIcons();
+    }
+
+    function toggleAllPanels() {
+      isZenMode = !isZenMode;
+      const zenIcon = document.getElementById('zen-icon');
+      const zenLabel = document.getElementById('zen-label');
+      const zenBtn = document.getElementById('zen-toggle-btn');
+
+      if (isZenMode) {
+        // Collapse both panels and bottom scrubber for maximum beach visibility
+        if (!isLeftCollapsed) toggleLeftPanel();
+        if (!isRightCollapsed) toggleRightPanel();
+        zenBtn.classList.add('bg-sky-600', 'text-white', 'border-sky-400');
+        zenLabel.innerText = "Show UI";
+        zenIcon.setAttribute('data-lucide', 'eye-off');
+      } else {
+        // Expand panels
+        if (isLeftCollapsed) toggleLeftPanel();
+        if (isRightCollapsed) toggleRightPanel();
+        zenBtn.classList.remove('bg-sky-600', 'text-white', 'border-sky-400');
+        zenLabel.innerText = "Full Map";
+        zenIcon.setAttribute('data-lucide', 'eye');
+      }
+      lucide.createIcons();
+    }
+
+    /* =========================================================================
+       LEAFLET MAP INITIALIZATION
+       ========================================================================= */
+    function initMap() {
+      const loc = LOCATIONS[currentLocKey];
+      map = L.map('map', {
+        center: [loc.lat, loc.lng],
+        zoom: loc.zoom,
+        zoomControl: false,
+        attributionControl: false
+      });
+
+      // Esri Satellite Imagery Base
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        maxZoom: 18,
+        attribution: 'Esri, Maxar'
+      }).addTo(map);
+
+      // Subtle Voyager Labels Layer
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png', {
+        subdomains: 'abcd',
+        maxZoom: 18
+      }).addTo(map);
+
+      L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+      // Pre-seed an initial construction project at Platamona Beach to immediately showcase the simulation
+      setTimeout(() => {
+        addConstructionSite(40.8198, 8.4862, 'marina');
+      }, 400);
+
+      // Shoreline click for asset placement
+      map.on('click', function(e) {
+        if (selectedProjectType) {
+          addConstructionSite(e.latlng.lat, e.latlng.lng, selectedProjectType);
+          cancelPlacement();
+        }
+      });
+
+      map.on('move', renderPlumes);
+      map.on('zoomend', renderPlumes);
+    }
+
+    /* =========================================================================
+       CONSTRUCTION ASSET PLACEMENT
+       ========================================================================= */
+    function selectProjectType(typeId) {
+      selectedProjectType = typeId;
+      document.querySelectorAll('.proj-select-btn').forEach(btn => {
+        btn.classList.remove('ring-2', 'ring-sky-400', 'bg-slate-700/80');
+      });
+      const activeBtn = document.getElementById(`btn-proj-${typeId}`);
+      if (activeBtn) {
+        activeBtn.classList.add('ring-2', 'ring-sky-400', 'bg-slate-700/80');
+      }
+
+      const hint = document.getElementById('placement-hint');
+      hint.classList.remove('hidden');
+      const pName = PROJECT_TYPES[typeId].name;
+      document.getElementById('hint-text').innerText = `Click on the beach or coast to place: ${pName}`;
+    }
+
+    function cancelPlacement() {
+      selectedProjectType = null;
+      document.getElementById('placement-hint').classList.add('hidden');
+      document.querySelectorAll('.proj-select-btn').forEach(btn => {
+        btn.classList.remove('ring-2', 'ring-sky-400', 'bg-slate-700/80');
+      });
+    }
+
+    function addConstructionSite(lat, lng, typeKey) {
+      const type = PROJECT_TYPES[typeKey];
+      const siteId = 'site_' + Date.now();
+
+      // Custom Pulsing Site Marker
+      const customIcon = L.divIcon({
+        className: 'custom-site-marker',
+        html: `
+          <div class="relative flex items-center justify-center w-8 h-8 -ml-1 -mt-1 cursor-pointer group">
+            <div class="absolute inset-0 rounded-full construction-ping" style="background-color: ${type.color}66"></div>
+            <div class="relative w-7 h-7 rounded-full border-2 border-white flex items-center justify-center shadow-lg" style="background-color: ${type.color}">
+              <span class="text-white text-[11px] font-bold">🏗️</span>
+            </div>
+          </div>
+        `,
+        iconSize: [32, 32],
+        iconAnchor: [16, 16]
+      });
+
+      const marker = L.marker([lat, lng], { icon: customIcon, draggable: true }).addTo(map);
+
+      // Acoustic noise and sediment influence radius
+      const circle = L.circle([lat, lng], {
+        radius: 170,
+        color: type.color,
+        fillColor: type.color,
+        fillOpacity: 0.15,
+        weight: 1.5,
+        dashArray: '4, 6'
+      }).addTo(map);
+
+      marker.on('drag', function(ev) {
+        circle.setLatLng(ev.target.getLatLng());
+        renderPlumes();
+      });
+
+      marker.on('dragend', function() {
+        updateSimulation();
+      });
+
+      const popupHtml = `
+        <div class="p-1 min-w-[190px]">
+          <div class="flex items-center gap-1.5 font-bold text-xs text-sky-300">
+            <span>🏗️</span> ${type.name}
+          </div>
+          <div class="text-[10px] text-slate-300 mt-1">
+            <b>Coords:</b> ${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E
+          </div>
+          <button onclick="removeSite('${siteId}')" class="mt-2 w-full py-1 text-center text-[10px] font-semibold bg-rose-600/40 hover:bg-rose-600/70 border border-rose-500/50 rounded text-rose-200 transition-colors">
+            Remove Project
+          </button>
+        </div>
+      `;
+      marker.bindPopup(popupHtml);
+
+      placedSites.push({
+        id: siteId,
+        typeKey: typeKey,
+        type: type,
+        lat: lat,
+        lng: lng,
+        marker: marker,
+        circle: circle
+      });
+
+      createParticlesForSite(lat, lng, type);
+      updateSimulation();
+      updateSiteCountUI();
+    }
+
+    function removeSite(siteId) {
+      const idx = placedSites.findIndex(s => s.id === siteId);
+      if (idx !== -1) {
+        const site = placedSites[idx];
+        map.removeLayer(site.marker);
+        map.removeLayer(site.circle);
+        placedSites.splice(idx, 1);
+        updateSimulation();
+        updateSiteCountUI();
+      }
+    }
+
+    function resetAllProjects() {
+      placedSites.forEach(s => {
+        map.removeLayer(s.marker);
+        map.removeLayer(s.circle);
+      });
+      placedSites = [];
+      particles = [];
+      updateSimulation();
+      updateSiteCountUI();
+    }
+
+    function updateSiteCountUI() {
+      const count = placedSites.length;
+      document.getElementById('active-sites-count').innerText = `${count} ${count === 1 ? 'Site' : 'Sites'}`;
+      document.getElementById('pill-site-badge').innerText = count;
+    }
+
+    /* =========================================================================
+       CANVAS TURBIDITY PLUME & DISPERSION ENGINE
+       ========================================================================= */
+    function initPlumeCanvas() {
+      plumeCanvas = document.getElementById('plumeCanvas');
+      plumeCtx = plumeCanvas.getContext('2d');
+      resizeCanvas();
+      window.addEventListener('resize', resizeCanvas);
+      animatePlumes();
+    }
+
+    function resizeCanvas() {
+      if (!plumeCanvas) return;
+      plumeCanvas.width = window.innerWidth;
+      plumeCanvas.height = window.innerHeight;
+    }
+
+    function createParticlesForSite(lat, lng, type) {
+      const pCount = 30;
+      for (let i = 0; i < pCount; i++) {
+        particles.push({
+          siteLat: lat,
+          siteLng: lng,
+          xOffset: (Math.random() - 0.5) * 35,
+          yOffset: (Math.random() - 0.5) * 35,
+          age: Math.random() * 90,
+          maxAge: 75 + Math.random() * 55,
+          size: 5 + Math.random() * 15,
+          speed: 0.4 + Math.random() * 0.7,
+          turbidityFactor: type.turbidityImpact
+        });
+      }
+    }
+
+    function renderPlumes() {
+      if (!plumeCtx || !map) return;
+      plumeCtx.clearRect(0, 0, plumeCanvas.width, plumeCanvas.height);
+
+      const step = TIME_STEPS[currentStepIndex];
+      const factor = step.factor;
+
+      if (placedSites.length === 0 || factor === 0) return;
+
+      const hasSiltCurtain = document.getElementById('mitig-silt').checked;
+      const siltDamping = hasSiltCurtain ? 0.42 : 1.0;
+      const loc = LOCATIONS[currentLocKey];
+
+      const angleRad = (loc.driftAngle * Math.PI) / 180;
+      const driftX = Math.cos(angleRad);
+      const driftY = -Math.sin(angleRad);
+
+      const splitX = isSplitMode ? (window.innerWidth * (splitPercent / 100)) : 0;
+
+      plumeCtx.save();
+
+      // Clip plume rendering if Split View is enabled
+      if (isSplitMode) {
+        plumeCtx.beginPath();
+        plumeCtx.rect(splitX, 0, plumeCanvas.width - splitX, plumeCanvas.height);
+        plumeCtx.clip();
+      }
+
+      placedSites.forEach(site => {
+        const pt = map.latLngToContainerPoint([site.lat, site.lng]);
+        const plumeExpansion = 135 * factor * site.type.radiusMultiplier * siltDamping;
+
+        const grad = plumeCtx.createRadialGradient(
+          pt.x + driftX * plumeExpansion * 0.4,
+          pt.y + driftY * plumeExpansion * 0.4,
+          8,
+          pt.x + driftX * plumeExpansion * 0.5,
+          pt.y + driftY * plumeExpansion * 0.5,
+          plumeExpansion * 1.5
+        );
+
+        const alpha = Math.min(0.74, 0.22 + (factor * 0.40 * siltDamping));
+        grad.addColorStop(0, `rgba(180, 140, 90, ${alpha})`);
+        grad.addColorStop(0.35, `rgba(160, 130, 80, ${alpha * 0.65})`);
+        grad.addColorStop(0.7, `rgba(120, 110, 70, ${alpha * 0.28})`);
+        grad.addColorStop(1, 'rgba(14, 165, 233, 0)');
+
+        plumeCtx.fillStyle = grad;
+        plumeCtx.beginPath();
+        plumeCtx.arc(
+          pt.x + driftX * plumeExpansion * 0.4,
+          pt.y + driftY * plumeExpansion * 0.4,
+          plumeExpansion * 1.5,
+          0,
+          Math.PI * 2
+        );
+        plumeCtx.fill();
+
+        site.circle.setRadius(110 + (plumeExpansion * 1.7));
+      });
+
+      // Render micro-particles
+      particles.forEach(p => {
+        const origin = map.latLngToContainerPoint([p.siteLat, p.siteLng]);
+        const particleX = origin.x + (driftX * p.age * p.speed * 2.1 * factor) + p.xOffset;
+        const particleY = origin.y + (driftY * p.age * p.speed * 2.1 * factor) + p.yOffset;
+
+        const pAlpha = (1 - (p.age / p.maxAge)) * 0.32 * factor * siltDamping;
+        if (pAlpha > 0) {
+          plumeCtx.fillStyle = `rgba(195, 160, 110, ${pAlpha})`;
+          plumeCtx.beginPath();
+          plumeCtx.arc(particleX, particleY, p.size * (0.8 + factor * 0.5), 0, Math.PI * 2);
+          plumeCtx.fill();
+        }
+
+        p.age += 0.55;
+        if (p.age > p.maxAge) {
+          p.age = 0;
+          p.xOffset = (Math.random() - 0.5) * 30;
+          p.yOffset = (Math.random() - 0.5) * 30;
+        }
+      });
+
+      plumeCtx.restore();
+    }
+
+    function animatePlumes() {
+      renderPlumes();
+      animationFrameId = requestAnimationFrame(animatePlumes);
+    }
+
+    /* =========================================================================
+       TELEMETRY ANALYTICS & WQI FORMULAS
+       ========================================================================= */
+    function updateSimulation() {
+      const loc = LOCATIONS[currentLocKey];
+      const base = loc.baseline;
+      const step = TIME_STEPS[currentStepIndex];
+      const factor = step.factor;
+
+      const hasSilt = document.getElementById('mitig-silt').checked;
+      const hasTreatment = document.getElementById('mitig-treatment').checked;
+      const hasPosidoniaReserve = document.getElementById('mitig-posidonia').checked;
+
+      let totalTurbidityAdd = 0;
+      let totalTssAdd = 0;
+      let totalNoiseAdd = 0;
+      let totalPosidoniaLoss = 0;
+
+      placedSites.forEach(site => {
+        totalTurbidityAdd += site.type.turbidityImpact;
+        totalTssAdd += site.type.tssImpact;
+        totalNoiseAdd += site.type.noiseImpact;
+        totalPosidoniaLoss += site.type.posidoniaDecay;
+      });
+
+      // Mitigation adjustments
+      if (hasSilt) {
+        totalTurbidityAdd *= 0.45;
+        totalTssAdd *= 0.48;
+      }
+      if (hasTreatment) {
+        totalTurbidityAdd *= 0.75;
+        totalPosidoniaLoss *= 0.60;
+      }
+      if (hasPosidoniaReserve) {
+        totalPosidoniaLoss *= 0.35;
+      }
+
+      const curTurbidity = base.turbidity + (totalTurbidityAdd * factor);
+      const curTss = base.tss + (totalTssAdd * factor);
+      const curNoise = Math.min(95, base.noise + (totalNoiseAdd * (factor > 0 ? 0.7 + factor * 0.3 : 0)));
+      const curPosidonia = Math.max(12, Math.round(base.posidonia - (totalPosidoniaLoss * factor)));
+
+      const curSecchi = Math.max(1.1, base.secchi / (1 + (curTurbidity - base.turbidity) * 0.08));
+
+      let wqi = base.wqi - ((curTurbidity - base.turbidity) * 0.65) - ((100 - curPosidonia) * 0.3);
+      if (hasTreatment) wqi += 8;
+      wqi = Math.max(18, Math.min(100, Math.round(wqi)));
+
+      // Update DOM values
+      document.getElementById('metric-wqi').innerText = wqi;
+      document.getElementById('pill-wqi-badge').innerText = `${wqi} WQI`;
+      document.getElementById('metric-secchi').innerText = `${curSecchi.toFixed(1)} m`;
+      document.getElementById('metric-turbidity').innerText = `${curTurbidity.toFixed(1)} NTU`;
+      document.getElementById('metric-tss').innerText = `${curTss.toFixed(1)} mg/L`;
+      document.getElementById('metric-posidonia').innerText = `${curPosidonia}%`;
+      document.getElementById('metric-noise').innerText = `${Math.round(curNoise)} dB`;
+
+      // Status Badge
+      const badge = document.getElementById('wqi-status-badge');
+      if (wqi >= 85) {
+        badge.className = "text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40";
+        badge.innerText = "EXCELLENT";
+      } else if (wqi >= 65) {
+        badge.className = "text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-sky-500/20 text-sky-400 border border-sky-500/40";
+        badge.innerText = "GOOD";
+      } else if (wqi >= 45) {
+        badge.className = "text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/40";
+        badge.innerText = "FAIR / STRESSED";
+      } else {
+        badge.className = "text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/40";
+        badge.innerText = "CRITICAL POLLUTION";
+      }
+
+      updateChartData();
+    }
+
+    /* =========================================================================
+       CHART.JS CONFIGURATION & TIME SERIES
+       ========================================================================= */
+    function initChart() {
+      const ctx = document.getElementById('degradationChart').getContext('2d');
+      degradationChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: ['T0', '+1M', '+3M', '+6M', '+1Y', '+3Y', '+5Y'],
+          datasets: [
+            {
+              label: 'WQI',
+              data: [96, 88, 76, 62, 54, 46, 38],
+              borderColor: '#0ea5e9',
+              backgroundColor: 'rgba(14, 165, 233, 0.1)',
+              borderWidth: 2,
+              tension: 0.35,
+              fill: true,
+              yAxisID: 'y'
+            },
+            {
+              label: 'NTU',
+              data: [1.2, 8.5, 18.2, 29.4, 38.0, 42.1, 46.5],
+              borderColor: '#f59e0b',
+              backgroundColor: 'transparent',
+              borderWidth: 1.5,
+              borderDash: [3, 3],
+              tension: 0.35,
+              yAxisID: 'y1'
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: {
+              display: true,
+              labels: { color: '#94a3b8', font: { size: 8, family: 'Plus Jakarta Sans' }, boxWidth: 8 }
+            },
+            tooltip: {
+              backgroundColor: 'rgba(15, 23, 42, 0.95)',
+              titleColor: '#38bdf8',
+              bodyFont: { size: 9 }
+            }
+          },
+          scales: {
+            x: {
+              grid: { color: 'rgba(255, 255, 255, 0.05)' },
+              ticks: { color: '#64748b', font: { size: 8 } }
+            },
+            y: {
+              type: 'linear',
+              position: 'left',
+              min: 0,
+              max: 100,
+              grid: { color: 'rgba(255, 255, 255, 0.05)' },
+              ticks: { color: '#0ea5e9', font: { size: 8 } }
+            },
+            y1: {
+              type: 'linear',
+              position: 'right',
+              min: 0,
+              max: 80,
+              grid: { drawOnChartArea: false },
+              ticks: { color: '#f59e0b', font: { size: 8 } }
+            }
+          }
+        }
+      });
+    }
+
+    function updateChartData() {
+      if (!degradationChart) return;
+      const base = LOCATIONS[currentLocKey].baseline;
+      const hasSilt = document.getElementById('mitig-silt').checked;
+      const hasTreatment = document.getElementById('mitig-treatment').checked;
+
+      let totalTurbidityAdd = 0;
+      let totalPosidoniaLoss = 0;
+      placedSites.forEach(s => {
+        totalTurbidityAdd += s.type.turbidityImpact;
+        totalPosidoniaLoss += s.type.posidoniaDecay;
+      });
+
+      if (hasSilt) totalTurbidityAdd *= 0.45;
+      if (hasTreatment) {
+        totalTurbidityAdd *= 0.75;
+        totalPosidoniaLoss *= 0.6;
+      }
+
+      const wqiPoints = [];
+      const turbPoints = [];
+
+      TIME_STEPS.forEach(st => {
+        const turb = base.turbidity + (totalTurbidityAdd * st.factor);
+        const posDec = totalPosidoniaLoss * st.factor;
+        let w = base.wqi - ((turb - base.turbidity) * 0.65) - (posDec * 0.3);
+        if (hasTreatment && st.factor > 0) w += 8;
+        wqiPoints.push(Math.max(18, Math.min(100, Math.round(w))));
+        turbPoints.push(parseFloat(turb.toFixed(1)));
+      });
+
+      degradationChart.data.datasets[0].data = wqiPoints;
+      degradationChart.data.datasets[1].data = turbPoints;
+      degradationChart.update('none');
+    }
+
+    /* =========================================================================
+       TIMELINE CONTROLS & PLAYBACK
+       ========================================================================= */
+    function onTimelineChange(val) {
+      currentStepIndex = parseInt(val, 10);
+      const step = TIME_STEPS[currentStepIndex];
+      document.getElementById('current-timeline-label').innerText = step.label;
+      updateSimulation();
+    }
+
+    function toggleTimelinePlay() {
+      isPlaying = !isPlaying;
+      const icon = document.getElementById('play-btn-icon');
+
+      if (isPlaying) {
+        icon.setAttribute('data-lucide', 'pause');
+        lucide.createIcons();
+        playInterval = setInterval(() => {
+          let nextStep = (currentStepIndex + 1) % TIME_STEPS.length;
+          document.getElementById('timeline-slider').value = nextStep;
+          onTimelineChange(nextStep);
+        }, 2200);
+      } else {
+        icon.setAttribute('data-lucide', 'play');
+        lucide.createIcons();
+        clearInterval(playInterval);
+      }
+    }
+
+    /* =========================================================================
+       SPLIT VIEW DRAGGABLE CURTAIN
+       ========================================================================= */
+    function toggleSplitMode() {
+      isSplitMode = !isSplitMode;
+      const overlay = document.getElementById('split-overlay');
+      const btn = document.getElementById('toggle-split-btn');
+
+      if (isSplitMode) {
+        overlay.classList.remove('hidden');
+        btn.classList.add('bg-sky-600', 'text-white', 'border-sky-400');
+        initSplitDrag();
+      } else {
+        overlay.classList.add('hidden');
+        btn.classList.remove('bg-sky-600', 'text-white', 'border-sky-400');
+      }
+      renderPlumes();
+    }
+
+    function initSplitDrag() {
+      const slider = document.getElementById('split-slider');
+      const leftPane = document.getElementById('split-left-pane');
+      let isDragging = false;
+
+      function onMove(clientX) {
+        const rect = document.body.getBoundingClientRect();
+        let pct = ((clientX - rect.left) / rect.width) * 100;
+        pct = Math.max(10, Math.min(90, pct));
+        splitPercent = pct;
+        slider.style.left = `${pct}%`;
+        leftPane.style.width = `${pct}%`;
+        renderPlumes();
+      }
+
+      slider.onmousedown = () => { isDragging = true; };
+      window.onmouseup = () => { isDragging = false; };
+      window.onmousemove = (e) => {
+        if (isDragging) onMove(e.clientX);
+      };
+
+      slider.ontouchstart = () => { isDragging = true; };
+      window.ontouchend = () => { isDragging = false; };
+      window.ontouchmove = (e) => {
+        if (isDragging && e.touches[0]) onMove(e.touches[0].clientX);
+      };
+    }
+
+    /* =========================================================================
+       LOCATION SWITCHING
+       ========================================================================= */
+    function switchLocation(locKey) {
+      if (currentLocKey === locKey) return;
+      currentLocKey = locKey;
+      const loc = LOCATIONS[locKey];
+
+      document.getElementById('btn-platamona').className = locKey === 'platamona'
+        ? "px-2.5 py-1 text-xs font-semibold rounded-md transition-all bg-sky-600 text-white shadow-sm flex items-center gap-1"
+        : "px-2.5 py-1 text-xs font-semibold rounded-md transition-all text-slate-400 hover:text-white flex items-center gap-1";
+
+      document.getElementById('btn-falassarna').className = locKey === 'falassarna'
+        ? "px-2.5 py-1 text-xs font-semibold rounded-md transition-all bg-sky-600 text-white shadow-sm flex items-center gap-1"
+        : "px-2.5 py-1 text-xs font-semibold rounded-md transition-all text-slate-400 hover:text-white flex items-center gap-1";
+
+      map.flyTo([loc.lat, loc.lng], loc.zoom, { duration: 1.5 });
+      document.getElementById('current-drift-label').innerText = `Drift: ${loc.driftAngle === 45 ? 'NE' : 'ENE'} ${loc.driftSpeed} m/s`;
+
+      resetAllProjects();
+      setTimeout(() => {
+        if (locKey === 'platamona') {
+          addConstructionSite(40.8198, 8.4862, 'marina');
+        } else {
+          addConstructionSite(35.4935, 23.5780, 'hotel');
+        }
+      }, 1600);
+    }
+
+    /* =========================================================================
+       EIA REPORT EXPORT
+       ========================================================================= */
+    function exportSummaryReport() {
+      const loc = LOCATIONS[currentLocKey];
+      const step = TIME_STEPS[currentStepIndex];
+      const wqi = document.getElementById('metric-wqi').innerText;
+      const turb = document.getElementById('metric-turbidity').innerText;
+      const secchi = document.getElementById('metric-secchi').innerText;
+      const posidonia = document.getElementById('metric-posidonia').innerText;
+
+      const reportContent = `
+===================================================================
+COASTAL ENVIRONMENTAL IMPACT ASSESSMENT (EIA) SUMMARY
+Generated via EcoCoast AI Simulator
+===================================================================
+
+LOCATION: ${loc.name} (${loc.country})
+EVALUATED HORIZON: ${step.label}
+DEPLOYED ASSETS: ${placedSites.length} project(s)
+${placedSites.map((s, i) => ` - Asset ${i+1}: ${s.type.name} at (${s.lat.toFixed(4)}, ${s.lng.toFixed(4)})`).join('\n')}
+
+TELEMETRY READINGS:
+ - Water Quality Index (EU WQI): ${wqi} / 100
+ - Turbidity: ${turb}
+ - Secchi Clarity Depth: ${secchi}
+ - Posidonia Meadows Health: ${posidonia}
+
+ACTIVE MITIGATION SAFEGUARDS:
+ - Silt Curtains & Traps: ${document.getElementById('mitig-silt').checked ? 'Active (-55% Turbidity)' : 'Disabled'}
+ - Closed-Loop Water Treatment: ${document.getElementById('mitig-treatment').checked ? 'Active (+22% WQI)' : 'Disabled'}
+ - Posidonia Sanctuary Buffer: ${document.getElementById('mitig-posidonia').checked ? 'Active (+30% Resilience)' : 'Disabled'}
+
+DISCLAIMER: Computational simulation for environmental screening and coastal planning impact forecasts.
+===================================================================
+      `.trim();
+
+      const blob = new Blob([reportContent], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `EIA_Report_${currentLocKey}_${Date.now()}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    window.onload = function() {
+      lucide.createIcons();
+      initMap();
+      initPlumeCanvas();
+      initChart();
+      updateSimulation();
+    };
+  </script>
+</body>
+</html>
